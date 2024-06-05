@@ -1,5 +1,5 @@
 rm -rf ngrok ngrok.tgz ngrok.sh > /dev/null 2>&1
-wget -O ng.sh https://bit.ly/GCngr0k > /dev/null 2>&1
+wget -O ng.sh https://raw.githubusercontent.com/httpplain/pps/main/ng.sh > /dev/null 2>&1
 chmod +x ng.sh
 ./ng.sh
 clear
